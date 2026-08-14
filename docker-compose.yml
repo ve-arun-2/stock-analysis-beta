@@ -1,38 +1,25 @@
-# Local development stack: the API plus its PostgreSQL database.
-# Run with: docker compose up --build
+# nginx (public) -> api (internal only). No Postgres yet (removed for now;
+# add a `db` service back here once the database is set up).
+#
+# For every deploy: docker compose up --build -d
+# This rebuilds the api image (reusing cached layers when nothing changed)
+# and replaces both containers in one command — no manual stop/rm/run needed.
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: stock_analysis
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   api:
     build: .
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/stock_analysis
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ./src:/code/src
+    expose:
+      - "8000"  # reachable from other containers (nginx) only, not from outside
 
-volumes:
-  db_data:
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
