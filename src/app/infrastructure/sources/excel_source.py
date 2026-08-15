@@ -10,11 +10,11 @@ from datetime import datetime
 
 import openpyxl
 import pandas as pd
-import yfinance as yf
 from openpyxl.styles import Font
 
 from app.core.logging import get_logger
 from app.domain.entities.stock import Stock, StockSourceType
+from app.infrastructure.sources.yfinance_client import fetch_cmp
 
 logger = get_logger(__name__)
 
@@ -57,17 +57,12 @@ class ExcelWatchlistSource:
             symbol = str(raw_symbol).strip().upper()
             row = row_of_symbol.get(symbol)
 
-            # Yahoo Finance needs the ".NS" suffix for NSE-listed stocks.
-            yahoo_symbol = symbol + ".NS"
-
-            try:
-                info = yf.Ticker(yahoo_symbol).info
-                logger.info(info)
-            except Exception as err:
-                print(f"Could not fetch {symbol}: {err}")
+            info = fetch_cmp(symbol)
+            if info is None:
                 if row:
                     worksheet.cell(row=row, column=column_of["Fetch Data"], value="Failed")
                 continue
+            logger.info(info)
 
             company_name = info.get("longName") or info.get("shortName") or symbol
             current_price = info.get("currentPrice") or info.get("regularMarketPrice")
@@ -98,9 +93,7 @@ class ExcelWatchlistSource:
         worksheet = workbook[self._sheet_breakout]
         green_bold = Font(color="008000", bold=True)
 
-        for row, current_price, column_of, stock in self.iterate_symbol_info(
-            worksheet, symbolList
-        ):
+        for row, current_price, column_of, stock in self.iterate_symbol_info(worksheet, symbolList):
             if row:
                 # BreakOut: did the price reach/cross the Target price for this row?
                 target = worksheet.cell(row=row, column=column_of["Target"]).value
@@ -130,14 +123,10 @@ class ExcelWatchlistSource:
         green_bold = Font(color="008000", bold=True)
         red_bold = Font(color="FF0000", bold=True)
 
-        for row, current_price, column_of, stock in self.iterate_symbol_info(
-            worksheet, symbolList
-        ):
+        for row, current_price, column_of, stock in self.iterate_symbol_info(worksheet, symbolList):
             if row:
                 # Watching Level: has CMP come within 2% of the Watching Target (either side)?
-                watching_target = worksheet.cell(
-                    row=row, column=column_of["Watching Target"]
-                ).value
+                watching_target = worksheet.cell(row=row, column=column_of["Watching Target"]).value
                 has_both_values = watching_target is not None and current_price is not None
                 reached = False
                 if has_both_values and watching_target != 0:

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Telegram bot (used by stock_monitor.py to send breakout alerts)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         """CORS origins as a list, parsed from the comma-separated env value."""
