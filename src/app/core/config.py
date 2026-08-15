@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # --- AWS S3 ---
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = ""
+    S3_BUCKET_NAME: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         """CORS origins as a list, parsed from the comma-separated env value."""
@@ -58,3 +64,6 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached Settings instance so the environment is parsed only once."""
     return Settings()
+
+
+settings = get_settings()

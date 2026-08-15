@@ -1,12 +1,14 @@
 """
 Excel watchlist source.
 
-Reads stock symbols from a watchlist Excel file, then looks up each
-symbol's live price on Yahoo Finance (using the `yfinance` package).
+Reads stock symbols from a watchlist Excel workbook stored in S3, then looks
+up each symbol's live price on Yahoo Finance (using the `yfinance` package).
+The workbook is fetched from and saved back to S3 — never to local disk.
 """
 
 from collections.abc import Iterator
 from datetime import datetime
+from io import BytesIO
 
 import openpyxl
 import pandas as pd
@@ -14,16 +16,16 @@ from openpyxl.styles import Font
 
 from app.core.logging import get_logger
 from app.domain.entities.stock import Stock, StockSourceType
-from app.infrastructure.sources.yfinance_client import fetch_cmp
+from app.infrastructure.sources.s3_watchlist_client import download_watchlist, upload_watchlist
+from app.infrastructure.sources.yfinance_client import fetch_cmp_yfinance
 
 logger = get_logger(__name__)
 
 
 class ExcelWatchlistSource:
-    """Reads stocks from a local Excel watchlist file and fetches their live price."""
+    """Reads stocks from the S3-hosted Excel watchlist and fetches their live price."""
 
-    def __init__(self, file_path: str) -> None:
-        self._file_path = file_path
+    def __init__(self) -> None:
         self._sheet_breakout = "Breakout Stocks CMP"
         self._sheet_watch_buy_range = "Buying Range Stocks CMP"
 
@@ -57,7 +59,7 @@ class ExcelWatchlistSource:
             symbol = str(raw_symbol).strip().upper()
             row = row_of_symbol.get(symbol)
 
-            info = fetch_cmp(symbol)
+            info = fetch_cmp_yfinance(symbol)
             if info is None:
                 if row:
                     worksheet.cell(row=row, column=column_of["Fetch Data"], value="Failed")
@@ -89,7 +91,7 @@ class ExcelWatchlistSource:
     def iterate_breakout_symbol(self, symbolList: list[str]) -> Iterator[Stock]:
         # Open the real workbook (not through pandas) so we can edit specific
         # cells and save it back without touching the other sheets/formatting.
-        workbook = openpyxl.load_workbook(self._file_path)
+        workbook = openpyxl.load_workbook(download_watchlist())
         worksheet = workbook[self._sheet_breakout]
         green_bold = Font(color="008000", bold=True)
 
@@ -111,14 +113,17 @@ class ExcelWatchlistSource:
 
             yield stock
 
-        # Save all the cell updates back to the file, once, after every symbol is done.
-        workbook.save(self._file_path)
+        # Save all the cell updates, once, after every symbol is done, and
+        # upload the updated workbook back to the same S3 key.
+        buffer = BytesIO()
+        workbook.save(buffer)
+        upload_watchlist(buffer)
 
     def iterate_symbol_buying_range(self, symbolList: list[str]) -> Iterator[Stock]:
         # Same idea as iterate_breakout_symbol(), but for the "Buying Range Stocks CMP"
         # sheet, which has different columns (Watching Target / Watching Level(1-2%)
         # instead of Target / BreakOut).
-        workbook = openpyxl.load_workbook(self._file_path)
+        workbook = openpyxl.load_workbook(download_watchlist())
         worksheet = workbook[self._sheet_watch_buy_range]
         green_bold = Font(color="008000", bold=True)
         red_bold = Font(color="FF0000", bold=True)
@@ -146,21 +151,24 @@ class ExcelWatchlistSource:
 
             yield stock
 
-        # Save all the cell updates back to the file, once, after every symbol is done.
-        workbook.save(self._file_path)
+        # Save all the cell updates, once, after every symbol is done, and
+        # upload the updated workbook back to the same S3 key.
+        buffer = BytesIO()
+        workbook.save(buffer)
+        upload_watchlist(buffer)
 
     async def fetch_stocks(self) -> list[Stock]:
         # --- Breakout Stocks CMP sheet ---
         # header=1 because row 0 in this sheet is just a title ("STOCKS - CMP Dashboard"),
         # the real column names (Symbol, Company Name, ...) start on row 1.
-        df_breakout = pd.read_excel(self._file_path, sheet_name=self._sheet_breakout, header=1)
+        df_breakout = pd.read_excel(download_watchlist(), sheet_name=self._sheet_breakout, header=1)
         breakout_symbols = df_breakout["Symbol"].dropna().tolist()
         print("Breakout sheet stocks :", breakout_symbols)
         breakout_stocks = [stock for stock in self.iterate_breakout_symbol(breakout_symbols)]
 
         # --- Buying Range Stocks CMP sheet ---
         df_buy_range = pd.read_excel(
-            self._file_path, sheet_name=self._sheet_watch_buy_range, header=1
+            download_watchlist(), sheet_name=self._sheet_watch_buy_range, header=1
         )
         buy_range_symbols = df_buy_range["Symbol"].dropna().tolist()
         print("Buying Range sheet stocks :", buy_range_symbols)

@@ -10,7 +10,7 @@ the same way instead of duplicating this logic.
 import yfinance as yf
 
 
-def fetch_cmp(symbol: str) -> dict | None:
+def fetch_cmp_yfinance(symbol: str) -> dict | None:
     """Fetch Yahoo Finance's live quote info for one NSE symbol, or None on failure."""
     yahoo_symbol = symbol if "." in symbol else f"{symbol}.NS"
     try:

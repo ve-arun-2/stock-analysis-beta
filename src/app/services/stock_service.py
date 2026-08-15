@@ -27,7 +27,7 @@ class StockService:
 
         match source_name:
             case "excel_watchlist":
-                return ExcelWatchlistSource("tests/My-watchlist-stocks.xlsx")
+                return ExcelWatchlistSource()
             case _:
                 raise ValueError(f"Unknown source: {source_name}")
 

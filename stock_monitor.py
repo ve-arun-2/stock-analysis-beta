@@ -17,13 +17,11 @@ from zoneinfo import ZoneInfo
 import httpx
 import pandas as pd
 
-from app.core.config import get_settings
-from app.infrastructure.sources.yfinance_client import fetch_cmp
+from app.core.config import settings
+from app.infrastructure.sources.s3_watchlist_client import download_watchlist
+from app.infrastructure.sources.yfinance_client import fetch_cmp_yfinance
 
-settings = get_settings()
-
-# Same file + sheet that excel_source.py's Breakout sheet uses.
-WATCHLIST_FILE = "tests/My-watchlist-stocks.xlsx"
+# Same S3 workbook + sheet that excel_source.py's Breakout sheet uses.
 SHEET_NAME = "Breakout Stocks CMP"
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -43,7 +41,7 @@ def market_is_open() -> bool:
 
 def get_watchlist() -> dict[str, float]:
     """Read {symbol: target_price} from the watchlist's Breakout sheet."""
-    df = pd.read_excel(WATCHLIST_FILE, sheet_name=SHEET_NAME, header=1)
+    df = pd.read_excel(download_watchlist(), sheet_name=SHEET_NAME, header=1)
 
     targets: dict[str, float] = {}
     for _, row in df.iterrows():
@@ -58,7 +56,7 @@ def get_latest_prices(symbols: list[str]) -> dict[str, float]:
     """Fetch the current price for each symbol (skips any that fail to fetch)."""
     prices: dict[str, float] = {}
     for symbol in symbols:
-        info = fetch_cmp(symbol)
+        info = fetch_cmp_yfinance(symbol)
         if info is None:
             continue
 
