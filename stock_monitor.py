@@ -29,14 +29,15 @@ IST = ZoneInfo("Asia/Kolkata")
 
 def market_is_open() -> bool:
     """NSE regular trading hours: Monday-Friday, 9:15-15:30 IST."""
-    now = datetime.now(IST)
+    # now = datetime.now(IST)
 
-    if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-        return False
+    # if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+    #     return False
 
-    market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
-    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
-    return market_open <= now <= market_close
+    # market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    # market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    # return market_open <= now <= market_close
+    return True
 
 
 def get_watchlist() -> dict[str, float]:
@@ -104,6 +105,7 @@ async def strategy_loop() -> None:
     breakout_state: dict[str, bool] = {}
 
     while True:
+        print(f"Breakout check: {datetime.now()}")
         if not market_is_open():
             await asyncio.sleep(300)
             continue
@@ -129,9 +131,9 @@ async def strategy_loop() -> None:
                 # crossing sends a fresh notification.
                 breakout_state[symbol] = False
 
-        await send_telegram_notification(new_breakouts)
+        # await send_telegram_notification(new_breakouts)
 
-        await asyncio.sleep(300)
+        await asyncio.sleep(60)
 
 
 if __name__ == "__main__":
