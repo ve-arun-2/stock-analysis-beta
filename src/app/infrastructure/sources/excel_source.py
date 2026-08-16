@@ -7,16 +7,22 @@ The workbook is fetched from and saved back to S3 — never to local disk.
 """
 
 from collections.abc import Iterator
-from datetime import datetime
 from io import BytesIO
 
 import openpyxl
 import pandas as pd
-from openpyxl.styles import Font
 
 from app.core.logging import get_logger
 from app.domain.entities.stock import Stock, StockSourceType
-from app.infrastructure.sources.s3_watchlist_client import download_watchlist, upload_watchlist
+from app.infrastructure.sources.watchlist_client_common import (
+    build_column_map,
+    build_row_map,
+    download_watchlist,
+    upload_watchlist,
+    write_breakout_status,
+    write_common_fields,
+    write_watching_level_status,
+)
 from app.infrastructure.sources.yfinance_client import fetch_cmp_yfinance
 
 logger = get_logger(__name__)
@@ -39,21 +45,9 @@ class ExcelWatchlistSource:
         # (Company Name, Sector, CMP, Volume, Fetch Data, Update Time).
         # Yields (row, current_price, column_of, stock) so each sheet-specific
         # method can add its own extra columns (BreakOut, Watching Level, ...).
-        header_row = 2  # row 1 is the title, row 2 has the real column names
-
-        # Map header name -> column number, e.g. {"Symbol": 2, "CMP (₹)": 5, ...}
-        column_of = {}
-        for cell in worksheet[header_row]:
-            if cell.value:
-                column_of[str(cell.value).strip()] = cell.column
-
-        # Map each symbol -> its row number, by scanning the Symbol column.
+        column_of = build_column_map(worksheet)
         symbol_column = column_of["Symbol"]
-        row_of_symbol = {}
-        for row in range(header_row + 1, worksheet.max_row + 1):
-            cell_value = worksheet.cell(row=row, column=symbol_column).value
-            if cell_value:
-                row_of_symbol[str(cell_value).strip().upper()] = row
+        row_of_symbol = build_row_map(worksheet, symbol_column)
 
         for raw_symbol in symbolList:
             symbol = str(raw_symbol).strip().upper()
@@ -72,12 +66,9 @@ class ExcelWatchlistSource:
             sector = info.get("industry") or info.get("sector")
 
             if row:
-                worksheet.cell(row=row, column=column_of["Company Name"], value=company_name)
-                worksheet.cell(row=row, column=column_of["Sector"], value=sector)
-                worksheet.cell(row=row, column=column_of["CMP (₹)"], value=current_price)
-                worksheet.cell(row=row, column=column_of["Volume"], value=volume)
-                worksheet.cell(row=row, column=column_of["Fetch Data"], value="Success")
-                worksheet.cell(row=row, column=column_of["Update Time"], value=datetime.now())
+                write_common_fields(
+                    worksheet, row, column_of, current_price, volume, sector, company_name
+                )
 
             stock = Stock(
                 symbol=symbol,
@@ -93,23 +84,11 @@ class ExcelWatchlistSource:
         # cells and save it back without touching the other sheets/formatting.
         workbook = openpyxl.load_workbook(download_watchlist())
         worksheet = workbook[self._sheet_breakout]
-        green_bold = Font(color="008000", bold=True)
 
         for row, current_price, column_of, stock in self.iterate_symbol_info(worksheet, symbolList):
             if row:
-                # BreakOut: did the price reach/cross the Target price for this row?
                 target = worksheet.cell(row=row, column=column_of["Target"]).value
-                crossed = False
-                if target is not None and current_price is not None and current_price >= target:
-                    crossed = True
-
-                breakout_cell = worksheet.cell(row=row, column=column_of["BreakOut"])
-                if crossed:
-                    breakout_cell.value = "Done"
-                    breakout_cell.font = green_bold
-                else:
-                    breakout_cell.value = "NA"
-                    breakout_cell.font = Font()
+                write_breakout_status(worksheet, row, column_of, current_price, target)
 
             yield stock
 
@@ -125,29 +104,13 @@ class ExcelWatchlistSource:
         # instead of Target / BreakOut).
         workbook = openpyxl.load_workbook(download_watchlist())
         worksheet = workbook[self._sheet_watch_buy_range]
-        green_bold = Font(color="008000", bold=True)
-        red_bold = Font(color="FF0000", bold=True)
 
         for row, current_price, column_of, stock in self.iterate_symbol_info(worksheet, symbolList):
             if row:
-                # Watching Level: has CMP come within 2% of the Watching Target (either side)?
                 watching_target = worksheet.cell(row=row, column=column_of["Watching Target"]).value
-                has_both_values = watching_target is not None and current_price is not None
-                reached = False
-                if has_both_values and watching_target != 0:
-                    percent_gap = abs(current_price - watching_target) / watching_target * 100
-                    if percent_gap <= 2:
-                        reached = True
-
-                watching_level_cell = worksheet.cell(
-                    row=row, column=column_of["Watching Level(1-2%)"]
+                write_watching_level_status(
+                    worksheet, row, column_of, current_price, watching_target
                 )
-                if reached:
-                    watching_level_cell.value = "Reached"
-                    watching_level_cell.font = green_bold
-                else:
-                    watching_level_cell.value = "Not Reached"
-                    watching_level_cell.font = red_bold
 
             yield stock
 
