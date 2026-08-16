@@ -152,12 +152,12 @@ async def send_telegram_notification(label: str, breakouts: list[tuple[str, floa
     lines = [
         f"{symbol} — {label}! CMP: {price}, Target: {target}" for symbol, price, target in breakouts
     ]
-    text = "\n".join(lines)
+    message = "\n".join(lines)
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
 
     async with httpx.AsyncClient() as client:
         try:
-            await client.post(url, data={"chat_id": settings.telegram_chat_id, "text": text})
+            await client.post(url, data={"chat_id": settings.telegram_chat_id, "text": message})
         except Exception as err:
             print(f"Could not send Telegram notification: {err}")
 
@@ -185,10 +185,10 @@ async def strategy_loop() -> None:
                 f"newly in range: {[s for s, _, _ in newly_reached]}"
             )
 
-        # await send_telegram_notification("crossed its target", new_breakouts)
-        # await send_telegram_notification("entered the buying range", newly_reached)
+        await send_telegram_notification("🚨 Crossed its target", new_breakouts)
+        await send_telegram_notification("🚨 Entered the buying range", newly_reached)
 
-        await asyncio.sleep(60)
+        await asyncio.sleep(300)
 
 
 if __name__ == "__main__":
