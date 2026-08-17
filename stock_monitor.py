@@ -149,9 +149,18 @@ async def send_telegram_notification(label: str, breakouts: list[tuple[str, floa
         print(f"Telegram not configured — skipping {label} alert for {symbols}")
         return
 
-    lines = [
-        f"{symbol} — {label}! CMP: {price}, Target: {target}" for symbol, price, target in breakouts
-    ]
+    label_msg = ""
+    if(label == "BREAKOUT_PRICE"):
+        label_msg = "<symbol> — 🚀Crossed Breakout Price-> <target> !! CMP: <price>"
+    elif(label == "BUY_RANGE_PRICE"):
+        label_msg = "<symbol> — 🚨Entered the buying range-> <target> !! CMP: <price>"
+
+    lines = []
+    for symbol, price, target in breakouts:
+        line = label_msg.replace("<symbol>", str(symbol))
+        line = line.replace("<target>", str(target))
+        line = line.replace("<price>", str(price))
+        lines.append(line)
     message = "\n".join(lines)
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
 
@@ -185,8 +194,8 @@ async def strategy_loop() -> None:
                 f"newly in range: {[s for s, _, _ in newly_reached]}"
             )
 
-        await send_telegram_notification("🚨 Crossed its target", new_breakouts)
-        await send_telegram_notification("🚨 Entered the buying range", newly_reached)
+        await send_telegram_notification("BREAKOUT_PRICE", new_breakouts)
+        await send_telegram_notification("BUY_RANGE_PRICE", newly_reached)
 
         await asyncio.sleep(300)
 
