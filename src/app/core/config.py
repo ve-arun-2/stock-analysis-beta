@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/stock_analysis"
+    DATABASE_URL: str = ""
+    DB_ECHO: bool = False
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
 
     # API
     cors_origins: str = "http://localhost:3000"

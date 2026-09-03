@@ -13,7 +13,7 @@ import openpyxl
 import pandas as pd
 
 from app.core.logging import get_logger
-from app.domain.entities.stock import Stock, StockSourceType
+from app.domain.entities.stock import Stock
 from app.infrastructure.sources.watchlist_client_common import (
     build_column_map,
     build_row_map,
@@ -24,16 +24,17 @@ from app.infrastructure.sources.watchlist_client_common import (
     write_watching_level_status,
 )
 from app.infrastructure.sources.yfinance_client import fetch_cmp_yfinance
+from app.infrastructure.repositories.stock_alert_repository import StockAlertRepository
 
 logger = get_logger(__name__)
-
 
 class ExcelWatchlistSource:
     """Reads stocks from the S3-hosted Excel watchlist and fetches their live price."""
 
-    def __init__(self) -> None:
+    def __init__(self, stock_alert_repo: StockAlertRepository) -> None:
         self._sheet_breakout = "Breakout Stocks CMP"
         self._sheet_watch_buy_range = "Buying Range Stocks CMP"
+        self._stock_alert_repo = stock_alert_repo
 
     @property
     def name(self) -> str:
@@ -58,12 +59,20 @@ class ExcelWatchlistSource:
                 if row:
                     worksheet.cell(row=row, column=column_of["Fetch Data"], value="Failed")
                 continue
-            logger.info(info)
+            # logger.info(info)
 
+            breakout_price = (
+                worksheet.cell(row=row, column=column_of["Target"]).value
+                if worksheet.title == self._sheet_breakout
+                else None
+            )
             company_name = info.get("longName") or info.get("shortName") or symbol
             current_price = info.get("currentPrice") or info.get("regularMarketPrice")
             volume = info.get("volume") or info.get("regularMarketVolume")
             sector = info.get("industry") or info.get("sector")
+            market_cap = info.get("marketCap")
+            average_daily_10days_volume = info.get("averageVolume10days")
+            exchange = info.get("fullExchangeName") or "NSE"
 
             if row:
                 write_common_fields(
@@ -72,14 +81,18 @@ class ExcelWatchlistSource:
 
             stock = Stock(
                 symbol=symbol,
-                name=company_name,
-                exchange="NSE",
-                source=StockSourceType.EXCEL_WATCHLIST,
-                cmp=current_price,
+                volume=volume,
+                average_daily_10days_volume=average_daily_10days_volume,
+                company_name=company_name,
+                exchange=exchange,
+                sector=sector,
+                market_cap=market_cap,
+                breakout_price=breakout_price,
             )
+            print(stock)
             yield row, current_price, column_of, stock
 
-    def iterate_breakout_symbol(self, symbolList: list[str]) -> Iterator[Stock]:
+    async def iterate_breakout_symbol(self, symbolList: list[str]) -> Iterator[Stock]:
         # Open the real workbook (not through pandas) so we can edit specific
         # cells and save it back without touching the other sheets/formatting.
         workbook = openpyxl.load_workbook(download_watchlist())
@@ -88,7 +101,9 @@ class ExcelWatchlistSource:
         for row, current_price, column_of, stock in self.iterate_symbol_info(worksheet, symbolList):
             if row:
                 target = worksheet.cell(row=row, column=column_of["Target"]).value
-                write_breakout_status(worksheet, row, column_of, current_price, target)
+                is_break_out_crossed = write_breakout_status(worksheet, row, column_of, current_price, target)
+                if(is_break_out_crossed):
+                    await self._stock_alert_repo.add(stock) # Call Alert Repo
 
             yield stock
 
@@ -126,8 +141,9 @@ class ExcelWatchlistSource:
         # the real column names (Symbol, Company Name, ...) start on row 1.
         df_breakout = pd.read_excel(download_watchlist(), sheet_name=self._sheet_breakout, header=1)
         breakout_symbols = df_breakout["Symbol"].dropna().tolist()
+        
         print("Breakout sheet stocks :", breakout_symbols)
-        breakout_stocks = [stock for stock in self.iterate_breakout_symbol(breakout_symbols)]
+        breakout_stocks = [stock async for stock in self.iterate_breakout_symbol(breakout_symbols)]
 
         # --- Buying Range Stocks CMP sheet ---
         df_buy_range = pd.read_excel(

@@ -18,8 +18,9 @@ logger = get_logger(__name__)
 class StockService:
     """Application service for collecting and persisting stocks."""
 
-    def __init__(self, repository) -> None:
+    def __init__(self, repository, alert_repository) -> None:
         self._repository = repository
+        self._alert_repository = alert_repository
 
     async def init_source(self, source_name):
         """Build the source plugin matching `source_name`."""
@@ -27,15 +28,10 @@ class StockService:
 
         match source_name:
             case "excel_watchlist":
-                return ExcelWatchlistSource()
+                return ExcelWatchlistSource(self._alert_repository)
             case _:
                 raise ValueError(f"Unknown source: {source_name}")
 
-        """saved: list[Stock] = []
-        for stock in fetched:
-            existing = await self._repository.get_by_symbol(stock.symbol)
-            saved.append(existing if existing else await self._repository.add(stock))
-        return saved"""
 
     async def collect_from_source(self, source_name):
         try:

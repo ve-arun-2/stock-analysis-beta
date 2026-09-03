@@ -11,7 +11,6 @@ forcing changes in the other two.
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from enum import StrEnum
 
 
@@ -26,15 +25,21 @@ class StockSourceType(StrEnum):
 
 @dataclass
 class Stock:
-    """A single tradable instrument tracked by the platform."""
+    """A single tradable instrument tracked by the platform (master/reference data),
+    optionally carrying the point-in-time fields captured when a breakout alert
+    fires (see `StockAlertRepository`)."""
 
     symbol: str
-    name: str
+    company_name: str
     exchange: str = "NSE"
-    source: StockSourceType = StockSourceType.EXCEL_WATCHLIST
-    cmp: float | None = None
-    observed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    sector: str | None = None
+    industry: str | None = None
+    market_cap: float | None = None
+    is_active: bool = True
     id: int | None = None  # None until persisted by a repository
+    volume: int | None = None
+    average_daily_10days_volume: int | None = None
+    breakout_price: float | None = None
 
 
 @dataclass

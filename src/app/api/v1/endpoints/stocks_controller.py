@@ -8,7 +8,7 @@ Pydantic schema. No business logic lives here.
 import logging
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import SourceRegistryDep, StockServiceDep
+from app.api.deps import StockServiceDep
 from app.schemas.stock_schema import StockCollectRequest, StockRead
 
 router = APIRouter()
@@ -25,7 +25,6 @@ async def list_stocks(stock_service: StockServiceDep) -> list[StockRead]:
 async def collect_stocks(
     request: StockCollectRequest,
     stock_service: StockServiceDep,
-    source_registry: SourceRegistryDep,
 ):
     """Collect stocks from the named source (see `infrastructure/sources/`) and persist them."""
     logger.info(f"=========: {request.source_name}" )

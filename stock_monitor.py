@@ -23,6 +23,8 @@ import httpx
 import openpyxl
 
 from app.core.config import settings
+from app.infrastructure.database.session import AsyncSessionFactory
+from app.infrastructure.repositories.stock_alert_repository import StockAlertRepository
 from app.infrastructure.sources.watchlist_client_common import (
     build_column_map,
     build_row_map,
@@ -33,12 +35,12 @@ from app.infrastructure.sources.watchlist_client_common import (
     write_watching_level_status,
 )
 from app.infrastructure.sources.yfinance_client import fetch_cmp_yfinance
+from app.domain.entities.stock import Stock
 
 BREAKOUT_SHEET = "Breakout Stocks CMP"
 BUYING_RANGE_SHEET = "Buying Range Stocks CMP"
 
 IST = ZoneInfo("Asia/Kolkata")
-
 
 def market_is_open() -> bool:
     """NSE regular trading hours: Monday-Friday, 9:15-15:30 IST."""
@@ -56,13 +58,14 @@ def market_is_open() -> bool:
 def _fetch_and_write_common_fields(worksheet, row: int, column_of: dict[str, int], symbol: str):
     """Fetch one symbol from Yahoo Finance and write the columns every sheet shares.
 
-    Returns the live price, or None if the fetch failed (Fetch Data is marked
-    "Failed" on the row in that case).
+    Returns (price, info) — info is the raw Yahoo Finance quote dict, needed by
+    callers that build a `Stock` for the alert repository. Returns (None, None)
+    if the fetch failed (Fetch Data is marked "Failed" on the row in that case).
     """
     info = fetch_cmp_yfinance(symbol)
     if info is None:
         worksheet.cell(row=row, column=column_of["Fetch Data"], value="Failed")
-        return None
+        return None, None
 
     company_name = info.get("longName") or info.get("shortName") or symbol
     price = info.get("currentPrice") or info.get("regularMarketPrice")
@@ -70,10 +73,13 @@ def _fetch_and_write_common_fields(worksheet, row: int, column_of: dict[str, int
     sector = info.get("industry") or info.get("sector")
 
     write_common_fields(worksheet, row, column_of, price, volume, sector, company_name)
-    return price
+    return price, info
 
 
-def process_breakout_sheet(breakout_state: dict[str, bool]) -> list[tuple[str, float, float]]:
+async def process_breakout_sheet(
+    breakout_state: dict[str, bool], 
+    stock_alert_repo: StockAlertRepository
+) -> list[tuple[str, float, float]]:
     """Check every symbol in the Breakout sheet, write results, return newly-crossed stocks."""
     workbook = openpyxl.load_workbook(download_watchlist())
     worksheet = workbook[BREAKOUT_SHEET]
@@ -84,7 +90,7 @@ def process_breakout_sheet(breakout_state: dict[str, bool]) -> list[tuple[str, f
     new_breakouts: list[tuple[str, float, float]] = []
 
     for symbol, row in row_of_symbol.items():
-        price = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
+        price, info = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
         if price is None:
             continue
 
@@ -95,6 +101,18 @@ def process_breakout_sheet(breakout_state: dict[str, bool]) -> list[tuple[str, f
             if not breakout_state.get(symbol):
                 new_breakouts.append((symbol, price, target))
                 breakout_state[symbol] = True
+
+            stock = Stock(
+                symbol=symbol,
+                company_name=info.get("longName") or info.get("shortName") or symbol,
+                exchange=info.get("fullExchangeName") or "NSE",
+                sector=info.get("industry") or info.get("sector"),
+                market_cap=info.get("marketCap"),
+                volume=info.get("volume") or info.get("regularMarketVolume"),
+                average_daily_10days_volume=info.get("average_daily_10days_volume"),
+                breakout_price=target,
+            )
+            await stock_alert_repo.add(stock)  # Call Alert Repo
         else:
             # Price dipped back below target - reset so the next crossing
             # sends a fresh notification.
@@ -117,7 +135,7 @@ def process_buying_range_sheet(watch_state: dict[str, bool]) -> list[tuple[str, 
     newly_reached: list[tuple[str, float, float]] = []
 
     for symbol, row in row_of_symbol.items():
-        price = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
+        price, _info = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
         if price is None:
             continue
 
@@ -185,7 +203,10 @@ async def strategy_loop() -> None:
             await asyncio.sleep(300)
             continue
 
-        new_breakouts = process_breakout_sheet(breakout_state)
+        async with AsyncSessionFactory() as session:
+            stock_alert_repo = StockAlertRepository(session)
+            new_breakouts = await process_breakout_sheet(breakout_state, stock_alert_repo)
+
         newly_reached = process_buying_range_sheet(watch_state)
 
         if new_breakouts or newly_reached:

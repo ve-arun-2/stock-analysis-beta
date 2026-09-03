@@ -21,11 +21,11 @@ from alembic import context
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from app.core.config import get_settings  # noqa: E402
-from app.infrastructure.database.base import Base  # noqa: E402
+from app.infrastructure.database.session import Base  # noqa: E402
 from app.infrastructure.database.models import *  # noqa: E402, F403
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

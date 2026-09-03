@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.infrastructure.database.session import get_session
+from app.infrastructure.repositories.stock_alert_repository import StockAlertRepository
 from app.infrastructure.repositories.stock_repository import SqlAlchemyStockRepository
-from app.infrastructure.sources.registry import build_source_registry
 from app.infrastructure.strategies.registry import build_strategy_registry
 from app.services.stock_service import StockService
 from app.services.strategy_runner_service import StrategyRunnerService
@@ -42,9 +42,17 @@ def get_stock_repository(session: DbSessionDep) -> SqlAlchemyStockRepository:
 StockRepositoryDep = Annotated[SqlAlchemyStockRepository, Depends(get_stock_repository)]
 
 
-def get_stock_service(repository: StockRepositoryDep) -> StockService:
-    """Provide the `StockService`, wired to the configured repository."""
-    return StockService(repository)
+def get_stock_alert_repository(session: DbSessionDep) -> StockAlertRepository:
+    """Provide the stock-alert repository, backed by the SQLAlchemy adapter."""
+    return StockAlertRepository(session)
+
+
+StockAlertRepositoryDep = Annotated[StockAlertRepository, Depends(get_stock_alert_repository)]
+
+
+def get_stock_service(repository: StockRepositoryDep, alert_repository: StockAlertRepositoryDep) -> StockService:
+    """Provide the `StockService`, wired to the configured repositories."""
+    return StockService(repository, alert_repository)
 
 
 StockServiceDep = Annotated[StockService, Depends(get_stock_service)]
@@ -56,14 +64,6 @@ def get_strategy_runner_service() -> StrategyRunnerService:
 
 
 StrategyRunnerServiceDep = Annotated[StrategyRunnerService, Depends(get_strategy_runner_service)]
-
-
-def get_source_registry(settings: SettingsDep, http_client: HttpClientDep) -> dict:
-    """Provide the name -> source factory registry (see `infrastructure/sources/`)."""
-    return build_source_registry(settings, http_client)
-
-
-SourceRegistryDep = Annotated[dict, Depends(get_source_registry)]
 
 
 def get_strategy_registry() -> dict:
