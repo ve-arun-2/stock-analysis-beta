@@ -1,27 +1,26 @@
 """Pydantic request/response models for the stocks API."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
 
 from app.domain.entities.stock import StockSourceType
 
 
 class StockRead(BaseModel):
-    """Response shape for a single stock."""
+    """Response shape for a single stock (master/reference data)."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int | None
     symbol: str
-    name: str
+    company_name: str
     exchange: str
-    source: StockSourceType
-    cmp: float | None
-    observed_at: datetime
+    sector: str | None
+    industry: str | None
+    market_cap: float | None
+    is_active: bool
 
 
 class StockCollectRequest(BaseModel):
     """Request body for triggering a collection run from a named source."""
 
-    source_name: str
+    source_name: StockSourceType

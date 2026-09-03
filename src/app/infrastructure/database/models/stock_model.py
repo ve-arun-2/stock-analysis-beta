@@ -12,18 +12,46 @@ from datetime import datetime
 from sqlalchemy import DateTime, Float, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.base import Base
+from app.infrastructure.database.session import Base
 
 
-class StockModel(Base):
-    """`stocks` table: one row per tracked instrument."""
+class StockMasterModel(Base):
+    """`stocks master` table: one row has each NSE/BSE stock."""
 
-    __tablename__ = "stocks"
+    __tablename__ = "stocks_master"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    exchange: Mapped[str] = mapped_column(String(16), default="NSE")
-    source: Mapped[str] = mapped_column(String(32), nullable=False)
-    cmp: Mapped[float | None] = mapped_column(Float, nullable=True)
-    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+    symbol: Mapped[str] = mapped_column(
+        String(32),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    company_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    exchange: Mapped[str] = mapped_column(
+        String(16),
+        default="NSE",
+        nullable=False,
+    )
+    sector: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    industry: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    market_cap: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False,
+    )

@@ -1,9 +1,12 @@
-# nginx (public) -> api (internal only). No Postgres yet (removed for now;
-# add a `db` service back here once the database is set up).
+# nginx (public) -> api (internal only) -> Supabase Postgres (external).
 #
 # For every deploy: docker compose up --build -d
 # This rebuilds the api image (reusing cached layers when nothing changed)
-# and replaces both containers in one command — no manual stop/rm/run needed.
+# and replaces containers as needed in one command — no manual stop/rm/run.
+#
+# DATABASE_URL (Supabase) comes from .env via env_file below — no local db
+# container. Do not add a hardcoded DATABASE_URL under api.environment here;
+# it would take precedence over env_file and silently point at the wrong DB.
 
 services:
   api:

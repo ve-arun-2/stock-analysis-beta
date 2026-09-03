@@ -7,14 +7,18 @@ is closed automatically afterwards.
 """
 
 from collections.abc import AsyncGenerator
-
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import get_settings
+from app.core.config import settings
 
-settings = get_settings()
-
-engine = create_async_engine(settings.database_url, echo=settings.debug, future=True)
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DB_ECHO,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=True,
+)
 
 AsyncSessionFactory = async_sessionmaker(
     bind=engine,
@@ -22,6 +26,8 @@ AsyncSessionFactory = async_sessionmaker(
     class_=AsyncSession,
 )
 
+class Base(DeclarativeBase):
+    """Shared declarative base for all ORM models."""
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
     """Yield a request-scoped async database session."""
