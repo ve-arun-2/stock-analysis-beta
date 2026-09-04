@@ -109,7 +109,7 @@ async def process_breakout_sheet(
                 sector=info.get("industry") or info.get("sector"),
                 market_cap=info.get("marketCap"),
                 volume=info.get("volume") or info.get("regularMarketVolume"),
-                average_daily_10days_volume=info.get("average_daily_10days_volume"),
+                average_daily_10days_volume=info.get("averageVolume10days"),
                 breakout_price=target,
             )
             await stock_alert_repo.add(stock)  # Call Alert Repo
