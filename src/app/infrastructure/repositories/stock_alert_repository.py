@@ -23,6 +23,7 @@ class StockAlertRepository:
       breakout_date=detected_at.date(),
       breakout_price=stock.breakout_price,
       breakout_volume= stock.volume,
+      breakout_volume_ratio=stock.breakout_volume_ratio,
       average_daily_10days_volume= stock.average_daily_10days_volume
     )
     self._session.add(model)

@@ -40,6 +40,7 @@ class Stock:
     volume: int | None = None
     average_daily_10days_volume: int | None = None
     breakout_price: float | None = None
+    breakout_volume_ratio: float | None = None
 
 
 @dataclass

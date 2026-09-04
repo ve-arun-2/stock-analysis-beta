@@ -87,7 +87,7 @@ async def process_breakout_sheet(
     column_of = build_column_map(worksheet)
     row_of_symbol = build_row_map(worksheet, column_of["Symbol"])
 
-    new_breakouts: list[tuple[str, float, float]] = []
+    new_breakouts: list[tuple[str, float, float, float]] = []
 
     for symbol, row in row_of_symbol.items():
         price, info = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
@@ -98,21 +98,30 @@ async def process_breakout_sheet(
         crossed = write_breakout_status(worksheet, row, column_of, price, target)
 
         if crossed and target is not None:
+            volume = info.get("volume") or info.get("regularMarketVolume")
+            average_daily_10days_volume = info.get("averageVolume10days")
+            breakout_volume_ratio = (
+                round(volume / average_daily_10days_volume, 2)
+                if volume and average_daily_10days_volume
+                else None
+            )
+
             if not breakout_state.get(symbol):
-                new_breakouts.append((symbol, price, target))
+                new_breakouts.append((symbol, price, target, breakout_volume_ratio))
                 breakout_state[symbol] = True
 
-            stock = Stock(
-                symbol=symbol,
-                company_name=info.get("longName") or info.get("shortName") or symbol,
-                exchange=info.get("fullExchangeName") or "NSE",
-                sector=info.get("industry") or info.get("sector"),
-                market_cap=info.get("marketCap"),
-                volume=info.get("volume") or info.get("regularMarketVolume"),
-                average_daily_10days_volume=info.get("averageVolume10days"),
-                breakout_price=target,
-            )
-            await stock_alert_repo.add(stock)  # Call Alert Repo
+                stock = Stock(
+                    symbol=symbol,
+                    company_name=info.get("longName") or info.get("shortName") or symbol,
+                    exchange=info.get("fullExchangeName") or "NSE",
+                    sector=info.get("industry") or info.get("sector"),
+                    market_cap=info.get("marketCap"),
+                    volume=volume,
+                    average_daily_10days_volume=average_daily_10days_volume,
+                    breakout_volume_ratio=breakout_volume_ratio,
+                    breakout_price=target,
+                )
+                await stock_alert_repo.add(stock)  # Call Alert Repo
         else:
             # Price dipped back below target - reset so the next crossing
             # sends a fresh notification.
@@ -132,7 +141,7 @@ def process_buying_range_sheet(watch_state: dict[str, bool]) -> list[tuple[str, 
     column_of = build_column_map(worksheet)
     row_of_symbol = build_row_map(worksheet, column_of["Symbol"])
 
-    newly_reached: list[tuple[str, float, float]] = []
+    newly_reached: list[tuple[str, float, float, float | None]] = []
 
     for symbol, row in row_of_symbol.items():
         price, _info = _fetch_and_write_common_fields(worksheet, row, column_of, symbol)
@@ -144,7 +153,9 @@ def process_buying_range_sheet(watch_state: dict[str, bool]) -> list[tuple[str, 
 
         if reached and watching_target is not None:
             if not watch_state.get(symbol):
-                newly_reached.append((symbol, price, watching_target))
+                # No volume-ratio concept for buying-range alerts — carry None
+                # so this matches send_telegram_notification's tuple shape.
+                newly_reached.append((symbol, price, watching_target, None))
                 watch_state[symbol] = True
         else:
             # Price moved back out of range - reset so the next time it
@@ -157,27 +168,31 @@ def process_buying_range_sheet(watch_state: dict[str, bool]) -> list[tuple[str, 
     return newly_reached
 
 
-async def send_telegram_notification(label: str, breakouts: list[tuple[str, float, float]]) -> None:
+async def send_telegram_notification(
+    label: str, breakouts: list[tuple[str, float, float, float | None]]
+) -> None:
     """Send one Telegram message listing every stock that changed status this cycle."""
     if not breakouts:
         return
 
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
-        symbols = [symbol for symbol, _, _ in breakouts]
+        symbols = [symbol for symbol, *_ in breakouts]
         print(f"Telegram not configured — skipping {label} alert for {symbols}")
         return
 
     label_msg = ""
     if(label == "BREAKOUT_PRICE"):
-        label_msg = "<symbol> — 🚀Crossed Breakout Price-> <target> !! CMP: <price>"
+        label_msg = "<symbol> — 🚀Crossed Breakout Price-> <target> !! CMP: <price> !! VR-> <VR>x"
     elif(label == "BUY_RANGE_PRICE"):
         label_msg = "<symbol> — 🚨Entered the buying range-> <target> !! CMP: <price>"
 
     lines = []
-    for symbol, price, target in breakouts:
+    for symbol, price, target, breakout_volume_ratio in breakouts:
         line = label_msg.replace("<symbol>", str(symbol))
         line = line.replace("<target>", str(target))
         line = line.replace("<price>", str(price))
+        if "<VR>" in line:
+            line = line.replace("<VR>", str(breakout_volume_ratio) if breakout_volume_ratio is not None else "N/A")
         lines.append(line)
     message = "\n".join(lines)
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
@@ -211,8 +226,8 @@ async def strategy_loop() -> None:
 
         if new_breakouts or newly_reached:
             print(
-                f"New breakouts: {[s for s, _, _ in new_breakouts]}, "
-                f"newly in range: {[s for s, _, _ in newly_reached]}"
+                f"New breakouts: {[s for s, *_ in new_breakouts]}, "
+                f"newly in range: {[s for s, *_ in newly_reached]}"
             )
 
         await send_telegram_notification("BREAKOUT_PRICE", new_breakouts)
