@@ -20,3 +20,4 @@ data/watchlists/*.xlsx
 
 .vscode/
 .idea/
+layer/*
