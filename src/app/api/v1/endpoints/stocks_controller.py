@@ -6,7 +6,8 @@ Thin HTTP adapters: each handler resolves its dependencies via `Depends`
 Pydantic schema. No business logic lives here.
 """
 import logging
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter
 
 from app.api.deps import StockServiceDep
 from app.schemas.stock_schema import StockCollectRequest, StockRead
@@ -26,11 +27,14 @@ async def collect_stocks(
     request: StockCollectRequest,
     stock_service: StockServiceDep,
 ):
-    """Collect stocks from the named source (see `infrastructure/sources/`) and persist them."""
-    logger.info(f"=========: {request.source_name}" )
-    if request.source_name is None:
-        raise HTTPException(status_code=400, detail=f"Unknown source: {request.source_name}")
+    """Collect stocks from the named sources (see `infrastructure/sources/`)."""
+    logger.info("collect_stocks requested: %s", request.source_list)
+    return await stock_service.collect_from_source(request.source_list)
 
-    stocks = await stock_service.collect_from_source(request.source_name)
-
-    return stocks
+@router.get("/stocks/generate_technical_indicator", tags=["stocks"])
+async def generate_technical_indicator(
+    request: StockCollectRequest,
+    stock_service: StockServiceDep,
+):
+    """Get stocks from table 'stock_daily_data' and generate indicator for those stocks."""
+    

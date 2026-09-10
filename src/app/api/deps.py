@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.infrastructure.database.session import get_session
-from app.infrastructure.repositories.stock_alert_repository import StockAlertRepository
+from app.infrastructure.repositories.stock_daily_data_repository import StockDailyDataRepository
 from app.infrastructure.repositories.stock_repository import SqlAlchemyStockRepository
 from app.infrastructure.strategies.registry import build_strategy_registry
 from app.services.stock_service import StockService
@@ -42,17 +42,22 @@ def get_stock_repository(session: DbSessionDep) -> SqlAlchemyStockRepository:
 StockRepositoryDep = Annotated[SqlAlchemyStockRepository, Depends(get_stock_repository)]
 
 
-def get_stock_alert_repository(session: DbSessionDep) -> StockAlertRepository:
-    """Provide the stock-alert repository, backed by the SQLAlchemy adapter."""
-    return StockAlertRepository(session)
+def get_stock_daily_data_repository(session: DbSessionDep) -> StockDailyDataRepository:
+    """Provide the daily-OHLCV repository, backed by the SQLAlchemy adapter."""
+    return StockDailyDataRepository(session)
 
 
-StockAlertRepositoryDep = Annotated[StockAlertRepository, Depends(get_stock_alert_repository)]
+StockDailyDataRepositoryDep = Annotated[
+    StockDailyDataRepository, Depends(get_stock_daily_data_repository)
+]
 
 
-def get_stock_service(repository: StockRepositoryDep, alert_repository: StockAlertRepositoryDep) -> StockService:
+def get_stock_service(
+    repository: StockRepositoryDep,
+    daily_data_repository: StockDailyDataRepositoryDep,
+) -> StockService:
     """Provide the `StockService`, wired to the configured repositories."""
-    return StockService(repository, alert_repository)
+    return StockService(repository, daily_data_repository)
 
 
 StockServiceDep = Annotated[StockService, Depends(get_stock_service)]

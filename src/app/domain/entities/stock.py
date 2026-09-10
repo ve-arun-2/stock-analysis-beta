@@ -42,6 +42,11 @@ class Stock:
     breakout_price: float | None = None
     breakout_volume_ratio: float | None = None
 
+    # Point-in-time fields captured when a collector run picks up this stock.
+    # `source_type` is the Chartink screener key it matched, or "excel_watchlist"
+    source_type: str | None = None
+    close: float | None = None
+    percent_change: float | None = None
 
 @dataclass
 class StrategyMatch:

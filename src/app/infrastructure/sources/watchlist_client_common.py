@@ -11,6 +11,7 @@ memory (BytesIO) for as long as it's being read or built.
 from datetime import datetime
 from io import BytesIO
 
+import openpyxl
 from openpyxl.styles import Font
 
 from app.core.aws_credentials import AwsCredentials
@@ -19,6 +20,9 @@ from app.core.config import settings
 aws_credentials = AwsCredentials()
 
 WATCHLIST_KEY = "My-watchlist-stocks.xlsx"
+
+# Sheets that list the symbols we track.
+WATCHLIST_SHEETS = ("Breakout Stocks CMP", "Buying Range Stocks CMP")
 
 GREEN_BOLD = Font(color="008000", bold=True)
 RED_BOLD = Font(color="FF0000", bold=True)
@@ -62,6 +66,26 @@ def build_row_map(worksheet, symbol_column: int) -> dict[str, int]:
         if cell_value:
             row_of_symbol[str(cell_value).strip().upper()] = row
     return row_of_symbol
+
+
+def read_watchlist_symbols() -> list[str]:
+    """Return the de-duplicated, upper-cased symbol list from every watchlist sheet."""
+    workbook = openpyxl.load_workbook(download_watchlist(), data_only=True)
+
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for sheet_name in WATCHLIST_SHEETS:
+        if sheet_name not in workbook.sheetnames:
+            continue
+        worksheet = workbook[sheet_name]
+        symbol_column = build_column_map(worksheet).get("Symbol")
+        if symbol_column is None:
+            continue
+        for symbol in build_row_map(worksheet, symbol_column):
+            if symbol not in seen:
+                seen.add(symbol)
+                symbols.append(symbol)
+    return symbols
 
 
 def write_common_fields(

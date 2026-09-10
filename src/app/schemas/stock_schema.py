@@ -1,6 +1,6 @@
 """Pydantic request/response models for the stocks API."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.entities.stock import StockSourceType
 
@@ -21,6 +21,6 @@ class StockRead(BaseModel):
 
 
 class StockCollectRequest(BaseModel):
-    """Request body for triggering a collection run from a named source."""
+    """Request body for triggering a collection run from one or more sources."""
 
-    source_name: StockSourceType
+    source_list: list[StockSourceType] = Field(min_length=1)

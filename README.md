@@ -79,7 +79,7 @@ how many sources or strategies exist, or how any of them work internally.
   PostgreSQL instance.
 
 **Intentionally stubbed** (raise `NotImplementedError` until a later phase):
-- `ExcelWatchlistSource.fetch_stocks`, `ChartinkSource.fetch_stocks`, `YahooFinanceSource.fetch_stocks`
+- `YahooFinanceSource.fetch_stocks`
 - `EMAStrategy.evaluate`, `ChartinkStrategy.evaluate`, `ExcelWatchlistStrategy.evaluate`
 - The entire `ai/agents/` package
 
