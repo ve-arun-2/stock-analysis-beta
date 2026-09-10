@@ -18,9 +18,13 @@ from app.core.config import Settings, get_settings
 from app.infrastructure.database.session import get_session
 from app.infrastructure.repositories.stock_daily_data_repository import StockDailyDataRepository
 from app.infrastructure.repositories.stock_repository import SqlAlchemyStockRepository
+from app.infrastructure.repositories.stock_technical_snapshot_repository import (
+    StockTechnicalSnapshotRepository,
+)
 from app.infrastructure.strategies.registry import build_strategy_registry
 from app.services.stock_service import StockService
 from app.services.strategy_runner_service import StrategyRunnerService
+from app.services.technical_indicator_service import TechnicalIndicatorService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -61,6 +65,31 @@ def get_stock_service(
 
 
 StockServiceDep = Annotated[StockService, Depends(get_stock_service)]
+
+
+def get_stock_technical_snapshot_repository(
+    session: DbSessionDep,
+) -> StockTechnicalSnapshotRepository:
+    """Provide the technical-snapshot repository, backed by the SQLAlchemy adapter."""
+    return StockTechnicalSnapshotRepository(session)
+
+
+StockTechnicalSnapshotRepositoryDep = Annotated[
+    StockTechnicalSnapshotRepository, Depends(get_stock_technical_snapshot_repository)
+]
+
+
+def get_technical_indicator_service(
+    daily_data_repository: StockDailyDataRepositoryDep,
+    snapshot_repository: StockTechnicalSnapshotRepositoryDep,
+) -> TechnicalIndicatorService:
+    """Provide the `TechnicalIndicatorService`, wired to the configured repositories."""
+    return TechnicalIndicatorService(daily_data_repository, snapshot_repository)
+
+
+TechnicalIndicatorServiceDep = Annotated[
+    TechnicalIndicatorService, Depends(get_technical_indicator_service)
+]
 
 
 def get_strategy_runner_service() -> StrategyRunnerService:

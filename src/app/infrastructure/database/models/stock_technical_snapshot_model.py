@@ -1,11 +1,17 @@
 from datetime import datetime, date
-from sqlalchemy import DateTime, Float, String, Date, Boolean
+from sqlalchemy import DateTime, Float, String, Date, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.session import Base
 
 class StockTechnicalSnapshotModel(Base):
     __tablename__ = "stock_technical_snapshots"
+    __table_args__ = (
+        # One snapshot per stock per day; re-running the generator upserts it.
+        UniqueConstraint(
+            "symbol", "trading_date", name="uq_stock_technical_snapshots_symbol_date"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
