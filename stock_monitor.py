@@ -215,7 +215,7 @@ async def strategy_loop() -> None:
     while True:
         print(f"Check: {datetime.now()}")
         if not market_is_open():
-            await asyncio.sleep(300)
+            await asyncio.sleep(180)
             continue
 
         async with AsyncSessionFactory() as session:
@@ -233,7 +233,7 @@ async def strategy_loop() -> None:
         await send_telegram_notification("BREAKOUT_PRICE", new_breakouts)
         await send_telegram_notification("BUY_RANGE_PRICE", newly_reached)
 
-        await asyncio.sleep(300)
+        await asyncio.sleep(180)
 
 
 if __name__ == "__main__":
